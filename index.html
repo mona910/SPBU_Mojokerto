@@ -999,6 +999,18 @@ Judul       : WebGIS SPBU Kabupaten Mojokerto
       /* Ensure compass and custom attribution don't overlap the sidebar toggle */
       .compass-container { right: 12px; bottom: 84px; }
 
+      /* semi-transparent overlay between map and sidebar to capture outside clicks */
+      #sidebarOverlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.32);
+        z-index: 2100;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 220ms ease;
+      }
+      #sidebarOverlay.visible { opacity: 1; pointer-events: auto; }
+
     }
   </style>
 </head>
@@ -2053,18 +2065,56 @@ Judul       : WebGIS SPBU Kabupaten Mojokerto
         if (collapsed) toggle.classList.add('collapsed'); else toggle.classList.remove('collapsed');
       }
 
+      // create overlay used on small screens to capture outside clicks
+      let overlay = document.getElementById('sidebarOverlay');
+      if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'sidebarOverlay';
+        document.body.appendChild(overlay);
+      }
+
+      function showOverlay(){ overlay.classList.add('visible'); }
+      function hideOverlay(){ overlay.classList.remove('visible'); }
+
+      function closeSidebar(){
+        if (!sidebar.classList.contains('collapsed')) sidebar.classList.add('collapsed');
+        setIcon(true);
+        hideOverlay();
+        setTimeout(function(){ if (window.map && typeof window.map.invalidateSize === 'function') window.map.invalidateSize(); else if (typeof map !== 'undefined') map.invalidateSize(); }, 360);
+      }
+
       // On small screens, start collapsed (hidden) so the sidebar acts as an overlay
       if (window && window.innerWidth && window.innerWidth <= 768) {
         if (!sidebar.classList.contains('collapsed')) sidebar.classList.add('collapsed');
         setIcon(true);
+        hideOverlay();
       }
 
       toggle.addEventListener('click', function(){
         const isCollapsed = sidebar.classList.toggle('collapsed');
         setIcon(isCollapsed);
+        if (!isCollapsed && window.innerWidth <= 768) {
+          // opened on small screen
+          showOverlay();
+        } else {
+          hideOverlay();
+        }
         // allow CSS transition to finish then invalidate map size
         setTimeout(function(){ if (window.map && typeof window.map.invalidateSize === 'function') window.map.invalidateSize(); else if (typeof map !== 'undefined') map.invalidateSize(); }, 360);
       });
+
+      // clicking overlay closes the sidebar on small screens
+      overlay.addEventListener('click', function(){ if (window.innerWidth <= 768) closeSidebar(); });
+
+      // clicking the map should also close the sidebar when overlay is active
+      try {
+        if (window.map && typeof window.map.on === 'function') {
+          map.on('click', function(){ if (window.innerWidth <= 768 && overlay.classList.contains('visible')) closeSidebar(); });
+        }
+      } catch(e){}
+
+      // close on ESC
+      document.addEventListener('keydown', function(e){ if ((e.key === 'Escape' || e.key === 'Esc') && window.innerWidth <= 768) { closeSidebar(); } });
     })();
 
     /* ===============================
