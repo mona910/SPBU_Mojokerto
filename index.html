@@ -1,0 +1,2064 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="initial-scale=1,user-scalable=no,maximum-scale=1,width=device-width">
+  <title>WebGIS Persebaran SPBU di Kabupaten Mojokerto</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+
+  <!-- Font Awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Leaflet Control Geocoder (search box) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+  <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+
+  <style>
+    :root{
+      --primary-600: #1a2980;
+      --accent: #ff6b35;
+      --muted: #666;
+      --glass: rgba(255,255,255,0.92);
+      --card: rgba(248,250,252,0.95);
+      --shadow: 0 10px 30px rgba(16,24,40,0.12);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+    }
+
+    html, body {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      background: linear-gradient(135deg, #1a2980 0%, #26d0ce 100%);
+    }
+
+    /* ===== KONTAINER UTAMA ===== */
+    .container {
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 15px;
+      gap: 15px;
+    }
+
+    /* ===== HEADER ===== */
+    .header {
+      background: linear-gradient(90deg, rgba(255,255,255,0.96), rgba(255,255,255,0.92));
+      padding: 20px 24px;
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(8px) saturate(1.05);
+      border: 1px solid rgba(255,255,255,0.45);
+      text-align: center;
+      position: relative;
+      transition: none; /* header static: no hover animation */
+    }
+
+    .header h1 {
+      color: var(--primary-600);
+      font-size: 28px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      letter-spacing: 0.2px;
+      text-shadow: 0 1px 0 rgba(255,255,255,0.6);
+    }
+
+    .header h1 i {
+      color: var(--accent);
+      background: linear-gradient(135deg,#fff4ea,#fff0e6);
+      padding: 8px;
+      border-radius: 8px;
+      box-shadow: 0 6px 18px rgba(26,41,128,0.08) inset;
+    }
+
+    .header p {
+      color: #555;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    .author {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid #eee;
+      font-size: 14px;
+      color: #666;
+      font-weight: 500;
+    }
+
+    /* ===== KONTEN UTAMA ===== */
+    .main-content {
+      display: flex;
+      flex: 1;
+      gap: 15px;
+      min-height: 0;
+    }
+
+    /* ===== SIDEBAR KONTROL ===== */
+    .sidebar {
+      width: 300px;
+      background: var(--glass);
+      border-radius: 15px;
+      padding: 14px;
+      box-shadow: 0 12px 30px rgba(16,24,40,0.08);
+      backdrop-filter: blur(8px) saturate(1.05);
+      border: 1px solid rgba(255,255,255,0.45);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+      transition: width 0.35s ease, padding 0.35s ease, margin 0.35s ease, transform 220ms ease;
+      min-width: 0;
+    }
+
+    .control-group {
+      background: var(--card);
+      padding: 12px;
+      border-radius: 12px;
+      border-left: 4px solid var(--primary-600);
+      box-shadow: 0 6px 18px rgba(16,24,40,0.04);
+      transition: transform 200ms ease, box-shadow 200ms ease;
+    }
+
+    .control-group:hover { transform: translateY(-3px); box-shadow: 0 18px 40px rgba(16,24,40,0.06); }
+
+    /* Collapsed sidebar state */
+    .sidebar.collapsed {
+      width: 0 !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      border-radius: 0 !important;
+      overflow: hidden !important;
+    }
+
+    /* Small floating toggle button */
+    .sidebar-toggle {
+      position: absolute;
+      top: 120px;
+      left: 14px;
+      z-index: 1200;
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      border: none;
+      background: linear-gradient(180deg,var(--primary-600),#234f9f);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 12px 28px rgba(16,24,40,0.12);
+      cursor: pointer;
+      transition: transform 160ms ease, box-shadow 160ms ease;
+    }
+
+    .sidebar-toggle.collapsed {
+      left: 8px;
+      background: linear-gradient(90deg,var(--accent),#ff9a66);
+      transform: translateX(0) scale(0.98);
+    }
+
+    /* Floating help (lamp) button in top-right */
+    .help-toggle {
+      position: absolute;
+      top: 12px;
+      right: 16px;
+      z-index: 1300;
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      border: none;
+      background: linear-gradient(90deg,var(--accent),#ff9a66);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 14px 32px rgba(255,107,53,0.16);
+      cursor: pointer;
+      transition: transform 160ms ease, box-shadow 160ms ease;
+      font-size: 18px;
+    }
+
+    .help-toggle:hover { transform: translateY(-4px); box-shadow: 0 20px 44px rgba(255,107,53,0.18); }
+
+    /* Help modal styles */
+    .help-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1400;
+      padding: 24px;
+    }
+
+    .help-modal {
+      width: 560px;
+      max-width: 100%;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 18px 50px rgba(16,24,40,0.2);
+      overflow: hidden;
+    }
+
+    .help-modal-header {
+      background: linear-gradient(90deg,var(--primary-600),#234f9f);
+      color: white;
+      padding: 16px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .help-modal-header h4 { margin: 0; font-size: 16px; }
+
+    .help-close {
+      background: transparent;
+      border: none;
+      color: white;
+      font-size: 18px;
+      cursor: pointer;
+      padding: 6px;
+      border-radius: 8px;
+    }
+
+    .help-body { padding: 16px 18px 22px 18px; color: #333; font-size: 14px; line-height: 1.5; }
+
+    .help-body ul { margin-left: 16px; }
+
+
+    .control-group h3 {
+      color: #1a2980;
+      margin-bottom: 15px;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .control-group h3 i {
+      color: #ff6b35;
+    }
+
+    /* Dropdown Kecamatan */
+    .styled-select {
+      width: 100%;
+      padding: 12px 15px;
+      border: 1px solid rgba(26,41,128,0.06);
+      border-radius: 10px;
+      font-size: 14px;
+      color: #222;
+      background: linear-gradient(180deg, #ffffff, #fbfdff);
+      cursor: pointer;
+      transition: box-shadow 180ms ease, transform 180ms ease;
+    }
+
+    .styled-select:hover {
+      border-color: #1a2980;
+    }
+
+    /* Kustomisasi slider untuk Filter Rating */
+    #ratingRange {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 10px;
+      background: linear-gradient(90deg, #ffe9df 0%, #ffd2bf 100%);
+      border-radius: 999px;
+      outline: none;
+      box-shadow: inset 0 1px 2px rgba(0,0,0,0.08);
+    }
+
+    #ratingRange::-webkit-slider-runnable-track {
+      height: 10px;
+      background: linear-gradient(90deg,#ffe9df,#ffd2bf);
+      border-radius: 999px;
+    }
+
+    #ratingRange::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      background: #ff6b35;
+      border-radius: 50%;
+      margin-top: -5px; /* center the thumb */
+      border: 3px solid #ffffff;
+      box-shadow: 0 6px 14px rgba(0,0,0,0.18);
+      cursor: pointer;
+      transition: transform 120ms ease;
+    }
+
+    #ratingRange:active::-webkit-slider-thumb { transform: scale(1.06); }
+
+    /* Firefox */
+    #ratingRange::-moz-range-track {
+      height: 10px;
+      background: linear-gradient(90deg,#ffe9df,#ffd2bf);
+      border-radius: 999px;
+    }
+    #ratingRange::-moz-range-thumb {
+      width: 20px; height: 20px; background: #ff6b35; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 6px 14px rgba(0,0,0,0.18);
+    }
+
+    /* IE / Edge */
+    #ratingRange::-ms-track { width:100%; height:10px; background:transparent; border-color:transparent; color:transparent; }
+    #ratingRange::-ms-fill-lower{ background: linear-gradient(90deg,#ffe9df,#ffd2bf); border-radius:999px; }
+    #ratingRange::-ms-fill-upper{ background: #e9e9e9; border-radius:999px; }
+
+    /* Nilai rating */
+    #ratingValue { color: var(--primary-600); font-weight: 700; }
+
+    .styled-select:focus {
+      outline: none;
+      border-color: #ff6b35;
+      box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.2);
+    }
+
+    /* Kontrol Basemap */
+    .basemap-controls {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+
+    .basemap-btn {
+      padding: 10px;
+      border: 1px solid rgba(16,24,40,0.06);
+      border-radius: 10px;
+      background: linear-gradient(180deg,#ffffff,#f7fbff);
+      color: #16324a;
+      font-size: 13px;
+      cursor: pointer;
+      transition: transform 160ms ease, box-shadow 160ms ease;
+      text-align: center;
+      box-shadow: 0 6px 18px rgba(16,24,40,0.03);
+    }
+
+    .basemap-btn:hover { transform: translateY(-3px); box-shadow: 0 16px 36px rgba(16,24,40,0.06); }
+
+    .basemap-btn.active {
+      border-color: transparent;
+      background: linear-gradient(90deg,var(--accent),#ff9a66);
+      color: white;
+      font-weight: 700;
+      box-shadow: 0 14px 40px rgba(255,107,53,0.14);
+    }
+
+    /* Action buttons (e.g., Zoom) — not basemap controls */
+    .action-btn {
+      padding: 10px;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(90deg,var(--primary-600),#2351b3);
+      color: white;
+      font-size: 13px;
+      cursor: pointer;
+      transition: transform 160ms ease, box-shadow 160ms ease;
+      text-align: center;
+      font-weight: 700;
+      box-shadow: 0 10px 26px rgba(26,41,128,0.12);
+    }
+
+    .action-btn:hover { transform: translateY(-3px); box-shadow: 0 20px 48px rgba(26,41,128,0.14); }
+
+    /* Legenda */
+    .legend-container {
+      max-height: 200px;
+      overflow-y: auto;
+      padding-right: 5px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 10px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+      cursor: pointer;
+      background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(250,251,255,0.98));
+      box-shadow: 0 6px 16px rgba(16,24,40,0.04);
+    }
+
+    .legend-item:hover { transform: translateY(-4px); box-shadow: 0 18px 40px rgba(16,24,40,0.06); }
+
+    .legend-item.active { background: linear-gradient(90deg, rgba(255,241,236,1), rgba(255,250,248,1)); border-left: 4px solid var(--accent); }
+
+    .legend-color {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      margin-right: 12px;
+      border: 2px solid white;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      flex-shrink: 0;
+    }
+
+    .legend-label {
+      font-size: 13px;
+      color: #444;
+      flex: 1;
+    }
+
+    /* ===== PETA ===== */
+    .map-container {
+      flex: 1;
+      position: relative;
+      border-radius: 15px;
+      overflow: hidden;
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.25);
+    }
+
+    #map {
+      height: 100%;
+      width: 100%;
+    }
+
+    /* ===== SPBU MARKER HOVER ANIMATION ===== */
+    .spbu-icon .spbu-marker-inner {
+      transition: transform 180ms cubic-bezier(.2,.8,.2,1), box-shadow 180ms, filter 180ms;
+      will-change: transform, box-shadow, filter;
+      transform-origin: 50% 65%;
+    }
+
+    .spbu-icon.spbu-hover .spbu-marker-inner,
+    .spbu-icon:hover .spbu-marker-inner {
+      transform: translateY(-6px) scale(1.35) rotate(-6deg);
+      box-shadow: 0 10px 30px rgba(255,107,53,0.65);
+      filter: drop-shadow(0 10px 24px rgba(255,107,53,0.20)) saturate(1.05);
+    }
+
+    /* Tooltip for SPBU name on hover */
+    .leaflet-tooltip.spbu-tooltip {
+      background: rgba(0,0,0,0.85) !important;
+      color: #fff !important;
+      border-radius: 8px !important;
+      padding: 6px 10px !important;
+      font-size: 13px !important;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.25) !important;
+      pointer-events: none !important;
+      border: none !important;
+    }
+
+    /* ===== KOMPONEN PETA ===== */
+    /* Skala */
+    .leaflet-control-scale {
+      margin-left: 20px !important;
+      margin-bottom: 20px !important;
+      font-size: 18px !important;
+      padding: 8px 14px !important;
+      background: rgba(255,255,255,0.98) !important;
+      border-radius: 14px !important;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.18) !important;
+      border: 1px solid rgba(0,0,0,0.08) !important;
+      color: #16324a !important;
+      display: flex !important;
+      align-items: center !important;
+      gap: 10px !important;
+      transform: translateZ(0);
+      min-width: 160px !important;
+    }
+
+    /* remove internal bar visuals: show only the distance text */
+    .leaflet-control-scale-line {
+      background: transparent !important;
+      box-shadow: none !important;
+      border: none !important;
+      height: auto !important;
+      min-width: 0 !important;
+      padding: 0 6px !important;
+      border-radius: 0 !important;
+      font-weight: 900 !important;
+      color: #ff6b35 !important;
+      display: inline-block !important;
+      line-height: 1 !important;
+      text-align: center !important;
+    }
+
+    /* ensure control container keeps a pleasant background while text stands out */
+    .leaflet-control-scale {
+      font-size: 18px !important;
+      padding: 6px 12px !important;
+      background: rgba(255,255,255,0.98) !important;
+      border-radius: 12px !important;
+      box-shadow: 0 8px 22px rgba(0,0,0,0.14) !important;
+      color: #16324a !important;
+      min-width: 120px !important;
+      justify-content: center !important;
+    }
+
+    /* Arah Mata Angin - VERSI BARU LEBIH MENARIK */
+    .compass-container {
+      position: absolute;
+      /* place compass above the custom attribution (bottom-right) */
+      right: 70px;
+      bottom: 90px;
+      left: auto;
+      top: auto;
+      z-index: 999;
+      width: 110px;
+      height: 110px;
+      pointer-events: none;
+    }
+
+    .compass-outer {
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+      border: none;
+      position: relative;
+    }
+
+    .compass-inner {
+      width: 94%;
+      height: 94%;
+      background: transparent;
+      border-radius: 50%;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .compass-direction {
+      position: absolute;
+      font-weight: bold;
+      font-size: 12px;
+      color: #1a2980;
+    }
+
+    .compass-n { top: 5px; left: 50%; transform: translateX(-50%); }
+    .compass-e { top: 50%; right: 5px; transform: translateY(-50%); }
+    .compass-s { bottom: 5px; left: 50%; transform: translateX(-50%); }
+    .compass-w { top: 50%; left: 5px; transform: translateY(-50%); }
+
+    .compass-ne { top: 15px; right: 15px; font-size: 10px; }
+    .compass-se { bottom: 15px; right: 15px; font-size: 10px; }
+    .compass-sw { bottom: 15px; left: 15px; font-size: 10px; }
+    .compass-nw { top: 15px; left: 15px; font-size: 10px; }
+
+    .compass-arrow {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 0;
+      height: 0;
+      border-left: 8px solid transparent;
+      border-right: 8px solid transparent;
+      border-bottom: 30px solid #ff6b35;
+      transform-origin: bottom center;
+      transform: translate(-50%, -50%);
+      filter: drop-shadow(0 3px 5px rgba(0,0,0,0.3));
+      z-index: 10;
+    }
+
+    .compass-center {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 12px;
+      height: 12px;
+      background: #ff6b35;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      border: 3px solid white;
+      box-shadow: 0 0 5px rgba(0,0,0,0.3);
+      z-index: 11;
+    }
+
+    /* SVG-based compass styling (new model) */
+    .compass-svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Make the processed compass image more vivid */
+    #northImg {
+      filter: saturate(1.6) contrast(1.12) brightness(1.02) drop-shadow(0 4px 6px rgba(0,0,0,0.35));
+      -webkit-filter: saturate(1.6) contrast(1.12) brightness(1.02) drop-shadow(0 4px 6px rgba(0,0,0,0.35));
+    }
+
+    /* Add a light circular backdrop and white outline so compass remains visible on dark basemaps */
+    .compass-outer {
+      background: rgba(255,255,255,0.88);
+      box-shadow: 0 8px 22px rgba(0,0,0,0.25);
+      padding: 4px; /* smaller padding so panel hugs the compass */
+      border-radius: 50%; /* circular backdrop to match compass */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* stronger multi-shadow to create a white outline effect around the dark compass */
+    #northImg {
+      filter: saturate(1.4) contrast(1.15) brightness(1.02) drop-shadow(0 0 4px rgba(255,255,255,0.95)) drop-shadow(0 6px 10px rgba(0,0,0,0.35));
+      -webkit-filter: saturate(1.4) contrast(1.15) brightness(1.02) drop-shadow(0 0 4px rgba(255,255,255,0.95)) drop-shadow(0 6px 10px rgba(0,0,0,0.35));
+    }
+
+    #compassArrow {
+      transform-origin: 50% 50%;
+      transform-box: fill-box;
+      transition: transform 0.25s ease;
+    }
+
+    .compass-reset {
+      position: absolute;
+      top: -5px;
+      right: -5px;
+      width: 28px;
+      height: 28px;
+      background: #1a2980;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 14px;
+      cursor: pointer;
+      box-shadow: 0 3px 8px rgba(0,0,0,0.2);
+      transition: all 0.3s ease;
+      z-index: 1000;
+    }
+
+    .compass-reset:hover {
+      background: #ff6b35;
+      transform: scale(1.1);
+    }
+
+    /* Atribusi */
+    /* Hide Leaflet default attribution; we'll use a custom element below the compass */
+    .leaflet-control-attribution { display: none !important; }
+
+    .custom-attribution {
+      position: absolute;
+      right: 18px;
+      bottom: 24px; /* place below the compass */
+      z-index: 1000;
+      background: rgba(0, 0, 0, 0.75);
+      color: #ffffff;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      display: inline-block;
+      white-space: nowrap;
+      box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+    }
+
+    /* ===== POPUP SPBU YANG DIPERBAIKI ===== */
+    .popup-card {
+      width: 320px;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: white;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 12px 35px rgba(0, 0, 0, 0.15);
+      border: 2px solid #e8f4ff;
+    }
+
+    .popup-header {
+      background: linear-gradient(135deg, #1a2980, #26d0ce);
+      color: white;
+      padding: 16px 20px;
+      position: relative;
+    }
+
+    .popup-title {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 5px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .popup-title i {
+      font-size: 22px;
+      color: #ffdd40;
+    }
+
+    .popup-kecamatan {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.15);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-top: 8px;
+    }
+
+    .popup-kecamatan i {
+      font-size: 11px;
+    }
+
+    .popup-body {
+      padding: 20px;
+    }
+
+    .popup-img {
+      width: 100%;
+      height: 160px;
+      object-fit: cover;
+      border-radius: 10px;
+      margin-bottom: 15px;
+      border: 1px solid #eaeaea;
+    }
+
+    .popup-address {
+      font-size: 14px;
+      color: #555;
+      line-height: 1.5;
+      margin-bottom: 15px;
+      padding: 10px;
+      background: #f8fafc;
+      border-radius: 8px;
+      border-left: 4px solid #1a2980;
+    }
+
+    .popup-info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .info-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .info-label {
+      font-size: 11px;
+      color: #666;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .info-value {
+      font-size: 14px;
+      font-weight: 700;
+      color: #1a2980;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .info-value i {
+      color: #ff6b35;
+    }
+
+    .rating-container {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 15px;
+      padding: 12px;
+      background: linear-gradient(to right, #fff8e1, #fff);
+      border-radius: 10px;
+      border: 1px solid #ffe082;
+    }
+
+    .stars {
+      color: #ffc107;
+      font-size: 16px;
+      letter-spacing: 2px;
+    }
+
+    .rating-text {
+      font-size: 13px;
+      color: #666;
+      font-weight: 500;
+    }
+
+    .popup-footer {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+    }
+
+    .popup-btn {
+      flex: 1;
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-directions {
+      background: linear-gradient(135deg, #1a2980, #26d0ce);
+      color: #ffffff !important;
+      border: none;
+      font-weight: 800 !important;
+    }
+
+    .btn-directions i,
+    .btn-directions {
+      color: #ffffff !important;
+    }
+
+    .btn-directions:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 7px 15px rgba(26, 41, 128, 0.3);
+    }
+
+    .btn-details {
+      background: white;
+      color: #1a2980;
+      border: 2px solid #1a2980;
+    }
+
+    .btn-details:hover {
+      background: #1a2980;
+      color: white;
+      transform: translateY(-3px);
+    }
+
+    /* ===== LABEL KECAMATAN DI PETA ===== */
+    .kecamatan-label {
+      position: absolute;
+      background: rgba(255, 255, 255, 0.85);
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #333;
+      border: 2px solid;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+      pointer-events: none;
+      z-index: 600;
+      transform: translate(-50%, -50%);
+      white-space: nowrap;
+    }
+
+    /* ===== HIGHLIGHT KECAMATAN TERPILIH ===== */
+    .kecamatan-highlight {
+      stroke-width: 5 !important;
+      stroke: #ff6b35 !important;
+      stroke-opacity: 1 !important;
+      stroke-dasharray: 6, 4 !important;
+      animation: pulse 1.8s infinite !important;
+      filter: drop-shadow(0 0 14px rgba(255, 107, 53, 0.8));
+      transition: all 0.25s ease !important;
+    }
+
+    @keyframes pulse {
+      0% { stroke-opacity: 0.7; }
+      50% { stroke-opacity: 1; }
+      100% { stroke-opacity: 0.7; }
+    }
+
+    /* Dim non-selected kecamatan to emphasize selection */
+    .kecamatan-dim {
+      opacity: 0.6;
+      filter: grayscale(60%) brightness(0.9) !important;
+    }
+
+    /* Active label style for selected kecamatan */
+    .kecamatan-label.kecamatan-label-active {
+      transform: scale(1.06);
+      background: #ffffff !important;
+      color: #ff6b35 !important;
+      border-color: #ff6b35 !important;
+      box-shadow: 0 6px 18px rgba(26,41,128,0.12);
+      font-weight: 800;
+    }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 992px) {
+      .main-content {
+        flex-direction: column;
+      }
+      
+      .sidebar {
+        width: 100%;
+        height: auto;
+      }
+      
+      .map-container {
+        height: 60vh;
+      }
+      
+      .compass-container {
+        bottom: 60px; /* moved up from 20px for small screens */
+        right: 50px;
+        left: auto;
+        width: 80px;
+        height: 80px;
+      }
+      /* ensure attribution also moves up on small screens to avoid overlap */
+      .custom-attribution {
+        bottom: 10px !important; /* place below smaller compass */
+        right: 10px !important;
+        font-size: 12px !important;
+        padding: 5px 10px !important;
+      }
+      
+      .compass-reset {
+        width: 24px;
+        height: 24px;
+        font-size: 12px;
+      }
+      
+      .popup-card {
+        width: 280px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <!-- HEADER -->
+    <div class="header">
+      <h1><i class="fas fa-gas-pump"></i> WebGIS Persebaran SPBU di Kabupaten Mojokerto</h1>
+      <p>Sistem Informasi Geografis untuk pemetaan Stasiun Pengisian Bahan Bakar Umum (SPBU) di Kabupaten Mojokerto.</p>
+      <div class="author">
+        <i class="fas fa-user-graduate"></i> Syifa Nabila Motumona-24611064
+      </div>
+      <button id="helpToggle" class="help-toggle" aria-label="Panduan Penggunaan"><i class="fas fa-lightbulb"></i></button>
+    </div>
+
+    <!-- KONTEN UTAMA -->
+    <div class="main-content">
+      <!-- SIDEBAR KONTROL -->
+      <div class="sidebar">
+        <!-- Peta Dasar control removed per user request -->
+
+        <!-- Tombol Zoom ke Seluruh Kabupaten -->
+        <div class="control-group">
+          <h3><i class="fas fa-expand-arrows-alt"></i> Aksi</h3>
+          <button id="zoomKabBtn" class="action-btn" style="width:100%;" title="Reset Pilihan" aria-label="Reset Pilihan"><i class="fas fa-undo" style="margin-right:8px;"></i> Reset Pilihan</button>
+        </div>
+
+        <!-- Kontrol Kecamatan -->
+        <div class="control-group">
+          <h3><i class="fas fa-map-marker-alt"></i> Filter Kecamatan</h3>
+          <select id="kecamatanSelect" class="styled-select">
+            <!-- Pilihan 'Seluruh' dihapus sesuai permintaan; opsi akan ditambahkan dari GeoJSON -->
+          </select>
+          <div style="margin-top: 10px; font-size: 12px; color: #666;">
+            <i class="fas fa-info-circle"></i> Klik pilihan untuk zoom ke kecamatan
+          </div>
+        </div>
+
+        <!-- Filter Rating SPBU -->
+        <div class="control-group">
+          <h3><i class="fas fa-star"></i> Filter Rating</h3>
+          <label for="ratingRange" style="font-size:13px;color:#444;display:block;margin-bottom:8px;">Minimal Rating: <strong id="ratingValue">0.0</strong></label>
+          <input id="ratingRange" type="range" min="0" max="5" step="0.1" value="0" style="width:100%;" />
+          <div style="display:flex;gap:8px;margin-top:10px;">
+            <button id="applyRatingBtn" class="action-btn" style="flex:1;">Terapkan</button>
+          </div>
+          <div style="margin-top:8px;font-size:12px;color:#666;">Tampilkan hanya SPBU dengan rating minimal.</div>
+        </div>
+
+        <!-- Legenda Kecamatan -->
+        <div class="control-group">
+          <h3><i class="fas fa-palette"></i> Legenda Kecamatan</h3>
+          <div class="legend-container" id="kecamatanLegend">
+            <!-- Legenda akan di-generate oleh JavaScript -->
+          </div>
+        </div>
+
+        <!-- Informasi -->
+        <div class="control-group">
+          <h3><i class="fas fa-info-circle"></i> Informasi Data</h3>
+          <div style="font-size: 13px; color: #666; line-height: 1.5;">
+            <p><strong>Sumber Data:</strong> Outscraper API</p>
+            <p><strong>Total SPBU:</strong> <span id="spbu-count">0</span> lokasi</p>
+            <p><strong>Kecamatan:</strong> <span id="kec-count">0</span> wilayah</p>
+            
+          </div>
+        </div>
+      </div>
+
+      <!-- PETA -->
+      <div class="map-container">
+        <div id="map"></div>
+        
+        <!-- Kompas: tampilkan gambar north.jpg setelah latar dihapus -->
+        <div class="compass-container" id="northCompassContainer" aria-hidden="true">
+          <div class="compass-outer">
+            <div class="compass-inner">
+              <img id="northImg" src="" alt="Kompas Utara" style="width:100%;height:100%;object-fit:contain;pointer-events:none;" />
+            </div>
+          </div>
+        </div>
+        <!-- Custom attribution placed below the compass -->
+        <div class="custom-attribution">Syifa Nabila Motumona-24611064</div>
+        <!-- Sidebar toggle button -->
+        <button id="sidebarToggle" class="sidebar-toggle" aria-label="Toggle sidebar"><i class="fas fa-angle-left"></i></button>
+
+        <!-- Help modal -->
+        <div id="helpModal" class="help-modal-overlay" aria-hidden="true">
+          <div class="help-modal" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+            <div class="help-modal-header">
+              <h4 id="helpTitle"><i class="fas fa-lightbulb" style="margin-right:8px;color:#ffd875;"></i> Panduan Penggunaan</h4>
+              <button id="helpClose" class="help-close" aria-label="Tutup">&times;</button>
+            </div>
+            <div class="help-body">
+              <p>Berikut panduan singkat dalam menggunakan WebGIS ini:</p>
+              <ul>
+                <li><strong>Reset Pilihan</strong><br>Klik tombol <em>Reset Pilihan</em> pada sidebar untuk mengembalikan tampilan peta ke kondisi awal.</li>
+                <li><strong>Filter Kecamatan</strong><br>Pilih kecamatan melalui dropdown untuk melakukan zoom dan menyorot wilayah tertentu. Pengguna juga dapat mengklik langsung wilayah kecamatan pada peta atau memilih item pada legenda untuk menyorot dan melakukan zoom ke kecamatan tersebut.</li>
+                <li><strong>Filter Rating</strong><br>Geser slider untuk menentukan nilai rating minimal, kemudian klik tombol <em>Terapkan</em> untuk menampilkan SPBU sesuai kriteria yang dipilih.</li>
+                <li><strong>Marker SPBU</strong><br>Klik marker SPBU untuk melihat informasi detail. Tombol navigasi pada popup dapat digunakan untuk menuju lokasi SPBU melalui Google Maps.</li>
+                <li><strong>Layer Peta</strong><br>Pengguna dapat mengganti basemap melalui tombol Layer yang berada di sisi kanan atas peta, tepat di bawah kolom pencarian.</li>
+              </ul>
+              <p style="margin-top:8px;color:#666;font-size:13px;">Untuk menutup panduan ini, klik ikon silang (×) atau klik di luar kotak panduan.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* ===============================
+       INISIALISASI MAP
+    ================================ */
+    var map = L.map('map', { worldCopyJump: false }).setView([-7.48, 112.44], 11);
+
+    /* ===============================
+       BASEMAP TAMBAHAN
+    ================================ */
+    var osm = L.tileLayer(
+      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      { 
+        maxZoom: 19, 
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        noWrap: true
+      }
+    ).addTo(map);
+
+    var cartoVoyager = L.tileLayer(
+      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+      { 
+        attribution: '© <a href="https://carto.com/">CartoDB</a>',
+        noWrap: true
+      }
+    );
+
+    var cartoDark = L.tileLayer(
+      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+      { 
+        attribution: '© <a href="https://carto.com/">CartoDB</a>',
+        noWrap: true
+      }
+    );
+
+    var esriImagery = L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      { 
+        attribution: '© <a href="https://www.esri.com/">Esri</a>',
+        noWrap: true
+      }
+    );
+
+    var topoMap = L.tileLayer(
+      'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+      {
+        maxZoom: 17,
+        attribution: '© <a href="https://opentopomap.org/">OpenTopoMap</a>',
+        noWrap: true
+      }
+    );
+
+    var streetView = L.tileLayer(
+      'https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+      {
+        attribution: '© <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, Tiles style by Humanitarian OpenStreetMap Team',
+        noWrap: true
+      }
+    );
+
+    var baseMaps = {
+      "OpenStreetMap": osm,
+      "Carto Voyager": cartoVoyager,
+      "Dark Mode": cartoDark,
+      "Satelit": esriImagery,
+      "Topografi": topoMap,
+      "Street View": streetView
+    };
+
+    /* ===============================
+       KUSTOMISASI ATTRIBUTION
+    ================================ */
+    L.Control.Attribution.prototype.options.prefix = '';
+    map.attributionControl.addAttribution('Syifa Nabila Motumona-24611064');
+    document.addEventListener('DOMContentLoaded', function(){
+      var a = document.querySelector('.leaflet-control-attribution');
+      if (a) a.classList.add('custom-attribution');
+    });
+
+    /* ===============================
+       PALETTE WARNA UNTUK KECAMATAN DENGAN TRANSPARANSI
+    ================================ */
+    const colorPalette = [
+      'rgba(255, 107, 107, 0.7)',    // Soft Red dengan transparansi
+      'rgba(78, 205, 196, 0.7)',     // Soft Turquoise
+      'rgba(255, 209, 102, 0.7)',    // Soft Yellow
+      'rgba(6, 214, 160, 0.7)',      // Soft Green
+      'rgba(17, 138, 178, 0.7)',     // Soft Blue
+      'rgba(239, 71, 111, 0.7)',     // Soft Pink
+      'rgba(115, 9, 183, 0.7)',      // Soft Purple
+      'rgba(58, 134, 255, 0.7)',     // Soft Light Blue
+      'rgba(251, 86, 7, 0.7)',       // Soft Orange
+      'rgba(131, 56, 236, 0.7)',     // Soft Violet
+      'rgba(255, 0, 110, 0.7)',      // Soft Magenta
+      'rgba(255, 158, 0, 0.7)',      // Soft Amber
+      'rgba(0, 187, 249, 0.7)',      // Soft Sky Blue
+      'rgba(0, 245, 212, 0.7)',      // Soft Cyan
+      'rgba(155, 93, 229, 0.7)',     // Soft Lavender
+      'rgba(241, 91, 181, 0.7)',     // Soft Rose
+      'rgba(45, 196, 182, 0.7)',     // Soft Teal
+      'rgba(233, 196, 106, 0.7)',    // Soft Gold
+      'rgba(244, 162, 97, 0.7)',     // Soft Peach
+      'rgba(231, 111, 81, 0.7)'      // Soft Coral
+    ];
+
+    /* ===============================
+       VARIABEL GLOBAL
+    ================================ */
+    var batasKab;
+    var kecamatanBounds = {};
+    var kecamatanLayers = {};
+    var kecamatanLabels = {};
+    var spbuMarkers = [];
+    var allSpbuInside = [];
+    var selectedKecamatan = null;
+    var kabGeoData = null;
+    var kecamatanColors = {};
+
+    /* Render SPBU markers with optional minimum rating filter */
+    function renderSpbuMarkers(minRating = 0) {
+      // clear previous
+      spbuMarkers.forEach(m => map.removeLayer(m));
+      spbuMarkers = [];
+
+      // filter and limit to 25 (preserve original behavior)
+      const filtered = allSpbuInside.filter(s => (Number(s.rating) || 0) >= Number(minRating));
+      const visible = filtered.slice(0, 25);
+
+      document.getElementById('spbu-count').textContent = visible.length;
+
+      visible.forEach(spbu => {
+          const tooltipText = spbu.name || spbu.nama || spbu.title || 'SPBU';
+          const marker = L.marker([spbu.latitude, spbu.longitude], { icon: spbuIcon })
+            .bindPopup(createSPBUPopup(spbu, spbu.kecamatan || 'Mojokerto'))
+            .bindTooltip(tooltipText, { direction: 'top', offset: [0, -12], className: 'spbu-tooltip' });
+
+        marker.addTo(map);
+        spbuMarkers.push(marker);
+
+        // add hover animation by toggling a class on the marker element
+        try {
+          marker.on('mouseover', function () {
+            const el = marker.getElement && marker.getElement();
+            if (el) el.classList.add('spbu-hover');
+          });
+          marker.on('mouseout', function () {
+            const el = marker.getElement && marker.getElement();
+            if (el) el.classList.remove('spbu-hover');
+          });
+        } catch (e) {
+          // fallback: ignore if marker events not available
+        }
+      });
+
+      if (spbuMarkers.length > 0) {
+        const group = new L.featureGroup(spbuMarkers);
+        map.fitBounds(group.getBounds().pad(0.1));
+      } else if (batasKab) {
+        map.fitBounds(batasKab.getBounds());
+      }
+    }
+
+    /* ===============================
+       ICON SPBU KUSTOM
+    ================================ */
+    var spbuIcon = L.divIcon({
+      html: '<div class="spbu-marker-inner" style="background-color: #ff6b35; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 3px solid white; box-shadow: 0 3px 10px rgba(255, 107, 53, 0.5);"><i class="fas fa-gas-pump" style="color: white; font-size: 18px;"></i></div>',
+      iconSize: [36, 36],
+      iconAnchor: [18, 36],
+      popupAnchor: [0, -36],
+      className: 'spbu-icon'
+    });
+
+    /* ===============================
+       FUNGSI RATING (DIPERBAIKI)
+    ================================ */
+    function renderStars(rating, reviews) {
+      if (!rating || rating === 0) {
+        return '<span class="stars">☆☆☆☆☆</span> <span class="rating-text">Belum ada rating</span>';
+      }
+      
+      var fullStars = Math.floor(rating);
+      var halfStar = rating % 1 >= 0.5 ? 1 : 0;
+      var emptyStars = 5 - fullStars - halfStar;
+      
+      var starsHTML = '';
+      for (var i = 0; i < fullStars; i++) starsHTML += '★';
+      if (halfStar) starsHTML += '½';
+      for (var i = 0; i < emptyStars; i++) starsHTML += '☆';
+      
+      return `<span class="stars">${starsHTML}</span> <span class="rating-text">${rating.toFixed(1)}/5 (${reviews || 0} ulasan)</span>`;
+    }
+
+    /* ===============================
+       FUNGSI UNTUK MEMBUAT LABEL KECAMATAN
+    ================================ */
+    function createKecamatanLabel(feature, layer) {
+      const namaKec = feature.properties.kecamatan || feature.properties.NAME || 'Kecamatan';
+      const center = layer.getBounds().getCenter();
+      
+      // Buat elemen label
+      const label = L.divIcon({
+        html: `<div class="kecamatan-label" style="border-color: ${kecamatanColors[namaKec].replace('0.7', '1')};">${namaKec}</div>`,
+        iconSize: [100, 40],
+        iconAnchor: [50, 20],
+        className: 'kecamatan-label-icon'
+      });
+      
+      // Tambahkan marker label ke peta
+      const labelMarker = L.marker(center, { icon: label, interactive: false });
+      labelMarker.addTo(map);
+      kecamatanLabels[namaKec] = labelMarker;
+    }
+
+    function updateLabelVisibility(){
+      if (!kabGeoData) return;
+      Object.keys(kecamatanLabels).forEach(name => {
+        try {
+          const marker = kecamatanLabels[name];
+          if (!marker || !marker.getLatLng) return;
+          const ll = marker.getLatLng();
+          const pt = turf.point([ll.lng, ll.lat]);
+          let inside = false;
+          for (let i=0;i<kabGeoData.features.length;i++){
+            try {
+              if (turf.booleanPointInPolygon(pt, kabGeoData.features[i])) { inside = true; break; }
+            } catch(e){}
+          }
+          const el = marker.getElement && marker.getElement();
+          if (el) el.style.display = inside ? '' : 'none';
+        } catch(e){}
+      });
+    }
+
+    /* ===============================
+       FUNGSI HIGHLIGHT KECAMATAN
+    ================================ */
+    function highlightKecamatan(kecamatanName) {
+      // Jika memilih kecamatan yang sama, reset pilihan dan kembalikan gaya semula
+      if (selectedKecamatan === kecamatanName) {
+        // restore all layers to default style
+        Object.keys(kecamatanLayers).forEach(name => {
+          const layer = kecamatanLayers[name];
+          if (!layer) return;
+          layer.setStyle({
+            weight: 2,
+            color: '#000',
+            fillColor: kecamatanColors[name],
+            fillOpacity: 0.7,
+            opacity: 0.9
+          });
+          // remove dim class from layer container if present
+        });
+
+        // restore labels
+        Object.keys(kecamatanLabels).forEach(name => {
+          const marker = kecamatanLabels[name];
+          if (!marker || !marker.getElement) return;
+          const el = marker.getElement();
+          if (!el) return;
+          const inner = el.querySelector('.kecamatan-label');
+          if (inner) inner.classList.remove('kecamatan-label-active');
+        });
+
+        // remove active class from legend
+        document.querySelectorAll('.legend-item').forEach(item => item.classList.remove('active'));
+
+        selectedKecamatan = null;
+        document.getElementById('kecamatanSelect').value = '';
+        // fit map back to kabupaten or markers
+        if (spbuMarkers.length > 0) {
+          const group = new L.featureGroup(spbuMarkers);
+          map.fitBounds(group.getBounds().pad(0.1));
+        } else if (batasKab) {
+          map.fitBounds(batasKab.getBounds());
+        }
+        return;
+      }
+
+      // Set kecamatan terpilih
+      selectedKecamatan = kecamatanName;
+
+      // Apply dim to other kecamatans and highlight selected
+      Object.keys(kecamatanLayers).forEach(name => {
+        const layer = kecamatanLayers[name];
+        if (!layer) return;
+        if (name === kecamatanName) {
+          layer.setStyle({
+            weight: 5,
+            color: '#ff6b35',
+            fillColor: kecamatanColors[name].replace('0.7', '0.95'),
+            fillOpacity: 0.95,
+            opacity: 1
+          });
+          try { layer.bringToFront(); } catch (e) {}
+        } else {
+          layer.setStyle({
+            weight: 1,
+            color: '#666',
+            fillColor: kecamatanColors[name],
+            fillOpacity: 0.12,
+            opacity: 0.6
+          });
+        }
+      });
+
+      // Update labels: highlight selected label, dim others
+      Object.keys(kecamatanLabels).forEach(name => {
+        const marker = kecamatanLabels[name];
+        if (!marker || !marker.getElement) return;
+        const el = marker.getElement();
+        if (!el) return;
+        const inner = el.querySelector('.kecamatan-label');
+        if (!inner) return;
+        if (name === kecamatanName) inner.classList.add('kecamatan-label-active'); else inner.classList.remove('kecamatan-label-active');
+      });
+
+      // Tambahkan kelas active ke legenda
+      document.querySelectorAll('.legend-item').forEach(item => {
+        if (item.dataset.kecamatan === kecamatanName) {
+          item.classList.add('active');
+        } else {
+          item.classList.remove('active');
+        }
+      });
+
+      // Update dropdown
+      document.getElementById('kecamatanSelect').value = kecamatanName;
+
+      // Zoom ke kecamatan
+      if (kecamatanBounds[kecamatanName]) map.fitBounds(kecamatanBounds[kecamatanName]);
+    }
+
+    /* ===============================
+       FUNGSI BUAT LEGENDA
+    ================================ */
+    function createLegend(kecamatanNames) {
+      const legendContainer = document.getElementById('kecamatanLegend');
+      legendContainer.innerHTML = '';
+      
+      kecamatanNames.forEach((kecamatan, index) => {
+        const color = kecamatanColors[kecamatan] || colorPalette[index % colorPalette.length];
+        
+        const legendItem = document.createElement('div');
+        legendItem.className = 'legend-item';
+        legendItem.dataset.kecamatan = kecamatan;
+        
+        legendItem.innerHTML = `
+          <div class="legend-color" style="background-color: ${color};"></div>
+          <div class="legend-label">${kecamatan}</div>
+        `;
+        
+        legendItem.addEventListener('click', function() {
+          highlightKecamatan(kecamatan);
+        });
+        
+        legendContainer.appendChild(legendItem);
+      });
+    }
+
+    /* ===============================
+       FUNGSI POPUP SPBU YANG DIPERBAIKI
+    ================================ */
+    function createSPBUPopup(spbu, kecamatanName) {
+      const kecColor = kecamatanColors[kecamatanName] || '#1a2980';
+      const solidColor = kecColor.replace('0.7', '1');
+      
+      return `
+        <div class="popup-card">
+          <div class="popup-header" style="border-bottom: 4px solid ${solidColor}">
+            <div class="popup-title">
+              <i class="fas fa-gas-pump"></i>
+              ${spbu.name || 'SPBU Mojokerto'}
+            </div>
+            <div class="popup-kecamatan" style="border-color: ${solidColor}">
+              <i class="fas fa-map-marker-alt"></i>
+              Kecamatan ${kecamatanName}
+            </div>
+          </div>
+          
+          <div class="popup-body">
+            <img 
+              src="${spbu.photo || 'https://images.unsplash.com/photo-1606220945770-b5b6c2c55bf1?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80'}"
+              class="popup-img"
+              alt="${spbu.name}"
+              onerror="this.src='https://images.unsplash.com/photo-1606220945770-b5b6c2c55bf1?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80'"
+            >
+            
+            <div class="popup-address">
+              <i class="fas fa-map-pin" style="color: ${solidColor}; margin-right: 8px;"></i>
+              ${spbu.address || 'Alamat tidak tersedia'}
+            </div>
+            
+            <div class="rating-container">
+              ${renderStars(spbu.rating || 0, spbu.reviews || 0)}
+            </div>
+            
+            <div class="popup-info-grid">
+              <div class="info-item">
+                <span class="info-label">Status</span>
+                <span class="info-value">
+                  <i class="fas fa-circle" style="color: #4CAF50;"></i>
+                  ${spbu.status || 'Buka 24 Jam'}
+                </span>
+              </div>
+              
+              <div class="info-item">
+                <span class="info-label">Jenis BBM</span>
+                <span class="info-value">
+                  <i class="fas fa-gas-pump"></i>
+                  ${spbu.fuel_types || 'Pertamax, Pertalite, Solar'}
+                </span>
+              </div>
+              
+              <!-- Telepon & Website dikosongkan sesuai permintaan -->
+            </div>
+            
+            <div class="popup-footer">
+                <a href="${spbu.location_link ? spbu.location_link : 'https://www.google.com/maps/dir/?api=1&destination=' + spbu.latitude + ',' + spbu.longitude}" 
+                  target="_blank" rel="noopener noreferrer"
+                  class="popup-btn btn-directions">
+                <i class="fas fa-directions"></i>
+                Rute
+              </a>
+              <!-- Tombol Detail dihapus sesuai permintaan -->
+            </div>
+            
+            <!-- Footer sumber data dihapus sesuai permintaan -->
+          </div>
+        </div>
+      `;
+    }
+
+    /* ===============================
+       LOAD DATA GEOJSON & SPBU (TANPA MENGUBAH LOGIKA LOAD DATA)
+    ================================ */
+    fetch('assets/kabupaten_mojokerto.geojson')
+      .then(res => res.json())
+      .then(data => {
+        // keep a reference to the loaded kabupaten GeoJSON for spatial checks
+        kabGeoData = data;
+        const kecamatanNames = [];
+        
+        // Assign warna unik untuk setiap kecamatan dengan transparansi
+        const totalKec = data.features.length || 1;
+        data.features.forEach((feature, index) => {
+          const namaKec = feature.properties.kecamatan || feature.properties.NAME || `Kecamatan ${index + 1}`;
+          kecamatanNames.push(namaKec);
+          // Gunakan palette dengan transparansi (0.7)
+          kecamatanColors[namaKec] = colorPalette[index % colorPalette.length];
+        });
+        
+        // Buat legenda
+        createLegend(kecamatanNames);
+        document.getElementById('kec-count').textContent = kecamatanNames.length;
+        
+        // Batas Kabupaten dengan warna berbeda per kecamatan (TRANSPARAN)
+        batasKab = L.geoJSON(data, {
+          style: function(feature) {
+            const namaKec = feature.properties.kecamatan || feature.properties.NAME || 'Kecamatan';
+            return {
+              color: '#000', // Border warna hitam
+              weight: 2,
+              fillColor: kecamatanColors[namaKec],
+              fillOpacity: 0.7, // Transparansi tinggi
+              opacity: 0.9
+            };
+          },
+          onEachFeature: function (feature, layer) {
+            const namaKec = feature.properties.kecamatan || feature.properties.NAME || 'Kecamatan';
+            kecamatanBounds[namaKec] = layer.getBounds();
+            kecamatanLayers[namaKec] = layer;
+            
+            // Buat label untuk kecamatan
+            createKecamatanLabel(feature, layer);
+            
+            const luasValue = feature.properties.luas && String(feature.properties.luas).trim();
+            const luasLine = luasValue ? `
+                  <p style="margin: 0 0 12px 0; font-size: 12px; color: #888;">
+                    <i class="fas fa-expand-arrows-alt"></i> Luas: ${luasValue} km²
+                  </p>
+                ` : '';
+
+            const popupContent = `
+              <div style="padding: 10px; min-width: 200px;">
+                <h4 style="margin: 0 0 10px 0; color: ${kecamatanColors[namaKec].replace('0.7', '1')}; 
+                    border-bottom: 3px solid ${kecamatanColors[namaKec].replace('0.7', '1')}; 
+                    padding-bottom: 8px;">
+                  <i class="fas fa-map"></i> Kecamatan ${namaKec}
+                </h4>
+                <p style="margin: 0 0 8px 0; font-size: 13px; color: #666;">
+                  ${feature.properties.deskripsi || 'Bagian dari Kabupaten Mojokerto'}
+                </p>
+                ${luasLine}
+                <button onclick="highlightKecamatan('${namaKec}')" 
+                  style="width: 100%; padding: 8px; margin-top: 5px; 
+                  background: ${kecamatanColors[namaKec].replace('0.7', '1')}; 
+                  color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 13px;
+                  display: flex; align-items: center; justify-content: center; gap: 8px;">
+                  <i class="fas fa-search-plus"></i> Zoom & Highlight Kecamatan
+                </button>
+              </div>
+            `;
+            
+            layer.bindPopup(popupContent);
+            
+            // Tambahkan ke dropdown
+            const opt = document.createElement("option");
+            opt.value = namaKec;
+            opt.textContent = namaKec;
+            document.getElementById("kecamatanSelect").appendChild(opt);
+          }
+        }).addTo(map);
+
+        // After labels are created, hide any that fall outside the kabupaten geometry
+        try {
+          updateLabelVisibility();
+          map.on('zoomend moveend', updateLabelVisibility);
+        } catch (e) {}
+
+        // Lock map panning/zooming roughly to the kabupaten bounds to avoid showing repeated world labels
+        try {
+          const kb = batasKab.getBounds();
+          if (kb && typeof map.setMaxBounds === 'function') {
+            map.setMaxBounds(kb.pad(0.5));
+            map.options.maxBoundsViscosity = 0.85;
+          }
+        } catch (e) {}
+
+        // Tambahkan layer control
+        L.control.layers(baseMaps, {
+          "Batas Kecamatan": batasKab
+        }, {
+          collapsed: true,
+          position: 'topright'
+        }).addTo(map);
+
+        // Load data SPBU - TIDAK DIUBAH (KECUALI POPUP)
+        fetch('assets/spbu_mojokerto.json')
+          .then(res => res.json())
+          .then(data => {
+            // Filter SPBU yang berada dalam kabupaten
+            const kabGeo = batasKab.toGeoJSON();
+            const inside = [];
+
+            data.forEach(spbu => {
+              if (spbu.latitude && spbu.longitude) {
+                const pt = turf.point([spbu.longitude, spbu.latitude]);
+                let kecamatanName = 'Tidak Diketahui';
+                
+                // Cari kecamatan untuk SPBU ini
+                for (let i = 0; i < kabGeo.features.length; i++) {
+                  if (turf.booleanPointInPolygon(pt, kabGeo.features[i])) {
+                    kecamatanName = kabGeo.features[i].properties.kecamatan || 
+                                   kabGeo.features[i].properties.NAME || 
+                                   'Kecamatan';
+                    spbu.kecamatan = kecamatanName;
+
+                    // Jika data menunjukkan lokasi sebagai 'Kota Mojokerto' (bukan Kabupaten),
+                    // lewati titik ini sehingga tidak dihitung dalam 25 yang ditampilkan.
+                    const cityField = (spbu.city || spbu.city_name || spbu.address || '').toString().toLowerCase();
+                    if (cityField.includes('kota mojokerto') || cityField.includes('kota')) {
+                      // jangan masukkan, lanjutkan ke spbu berikutnya
+                      break;
+                    }
+
+                    inside.push(spbu);
+                    break;
+                  }
+                }
+              }
+            });
+
+            // Simpan semua SPBU yang berada dalam kabupaten, lalu render (dengan filter default)
+            allSpbuInside = inside;
+            renderSpbuMarkers(0);
+          })
+          .catch(error => {
+            console.error('Error loading SPBU data:', error);
+            // Tambahkan marker contoh jika file tidak ditemukan
+            const sampleMarker = L.marker([-7.48, 112.44], { icon: spbuIcon })
+              .bindPopup(createSPBUPopup({
+                name: 'SPBU Contoh Mojokerto',
+                address: 'Jl. Raya Mojokerto - Jombang, Mojokerto',
+                rating: 4.5,
+                reviews: 120,
+                status: 'Buka 24 Jam',
+                fuel_types: 'Pertamax, Pertalite, Solar',
+                phone: '(0321) 123456',
+                website: 'https://pertamina.com'
+              }, 'Mojosari'))
+              .bindTooltip('SPBU Contoh Mojokerto', { direction: 'top', offset: [0, -12], className: 'spbu-tooltip' })
+              .addTo(map);
+            spbuMarkers.push(sampleMarker);
+            document.getElementById('spbu-count').textContent = 1;
+          });
+      })
+      .catch(error => {
+        console.error('Error loading GeoJSON:', error);
+        // Buat data contoh jika file tidak ditemukan
+        const sampleData = {
+          type: "FeatureCollection",
+          features: [
+            {
+              type: "Feature",
+              properties: { kecamatan: "Pungging", deskripsi: "Kecamatan Pungging", luas: "45.2" },
+              geometry: { type: "Polygon", coordinates: [[[112.4, -7.5], [112.5, -7.5], [112.5, -7.4], [112.4, -7.4], [112.4, -7.5]]] }
+            },
+            {
+              type: "Feature",
+              properties: { kecamatan: "Mojosari", deskripsi: "Kecamatan Mojosari", luas: "38.7" },
+              geometry: { type: "Polygon", coordinates: [[[112.5, -7.5], [112.6, -7.5], [112.6, -7.4], [112.5, -7.4], [112.5, -7.5]]] }
+            }
+          ]
+        };
+        
+        // Proses data contoh
+        const kecamatanNames = sampleData.features.map(f => f.properties.kecamatan);
+        kecamatanNames.forEach((name, index) => {
+          kecamatanColors[name] = colorPalette[index % colorPalette.length];
+        });
+        
+        createLegend(kecamatanNames);
+        document.getElementById('kec-count').textContent = kecamatanNames.length;
+      });
+
+    /* ===============================
+       EVENT LISTENERS (TIDAK DIUBAH)
+    ================================ */
+    // Dropdown Kecamatan
+    document.getElementById("kecamatanSelect")
+      .addEventListener("change", function () {
+        if (!this.value) {
+          // Reset highlight
+          if (selectedKecamatan && kecamatanLayers[selectedKecamatan]) {
+            kecamatanLayers[selectedKecamatan].setStyle({
+              weight: 2,
+              color: '#000',
+              fillColor: kecamatanColors[selectedKecamatan],
+              fillOpacity: 0.7
+            });
+            
+            document.querySelectorAll('.legend-item').forEach(item => {
+              item.classList.remove('active');
+            });
+          }
+          
+          selectedKecamatan = null;
+          
+          if (spbuMarkers.length > 0) {
+            const group = new L.featureGroup(spbuMarkers);
+            map.fitBounds(group.getBounds().pad(0.1));
+          } else if (batasKab) {
+            map.fitBounds(batasKab.getBounds());
+          }
+        } else {
+          highlightKecamatan(this.value);
+        }
+      });
+
+      // Tombol untuk zoom ke seluruh kabupaten
+      const zoomKabBtn = document.getElementById('zoomKabBtn');
+      if (zoomKabBtn) {
+          // helper: restore all kecamatan & UI to default
+          function resetKecamatanSelection() {
+            // restore all layer styles
+            Object.keys(kecamatanLayers).forEach(name => {
+              const layer = kecamatanLayers[name];
+              if (!layer) return;
+              layer.setStyle({
+                weight: 2,
+                color: '#000',
+                fillColor: kecamatanColors[name],
+                fillOpacity: 0.7,
+                opacity: 0.9
+              });
+            });
+
+            // restore labels
+            Object.keys(kecamatanLabels).forEach(name => {
+              const marker = kecamatanLabels[name];
+              if (!marker || !marker.getElement) return;
+              const el = marker.getElement();
+              if (!el) return;
+              const inner = el.querySelector('.kecamatan-label');
+              if (inner) inner.classList.remove('kecamatan-label-active');
+            });
+
+            // restore legend
+            document.querySelectorAll('.legend-item').forEach(item => item.classList.remove('active'));
+
+            // clear selected variable and dropdown
+            selectedKecamatan = null;
+            const sel = document.getElementById('kecamatanSelect');
+            if (sel) sel.value = '';
+
+            // reset rating control to default (single reset button behavior)
+            const ratingRangeEl = document.getElementById('ratingRange');
+            const ratingValEl = document.getElementById('ratingValue');
+            if (ratingRangeEl) ratingRangeEl.value = 0;
+            if (ratingValEl) ratingValEl.textContent = '0.0';
+
+            // re-render markers with no rating filter
+            try { renderSpbuMarkers(0); } catch (e) {}
+          }
+
+          zoomKabBtn.addEventListener('click', function() {
+            if (batasKab) {
+              // reset selections and UI before zoom
+              resetKecamatanSelection();
+              map.fitBounds(batasKab.getBounds());
+            } else {
+              alert('Batas kabupaten belum dimuat. Silakan tunggu sebentar.');
+            }
+          });
+      }
+
+    // Kontrol Basemap
+    document.querySelectorAll('.basemap-btn').forEach(button => {
+      button.addEventListener('click', function() {
+        // Hapus kelas active dari semua tombol
+        document.querySelectorAll('.basemap-btn').forEach(btn => {
+          btn.classList.remove('active');
+        });
+        
+        // Tambahkan kelas active ke tombol yang diklik
+        this.classList.add('active');
+        
+        // Ganti basemap
+        const basemap = this.getAttribute('data-basemap');
+        
+        // Matikan semua layer terlebih dahulu
+        Object.values(baseMaps).forEach(layer => {
+          map.removeLayer(layer);
+        });
+        
+        // Tambahkan layer yang dipilih
+        switch(basemap) {
+          case 'carto':
+            map.addLayer(cartoVoyager);
+            break;
+          case 'dark':
+            map.addLayer(cartoDark);
+            break;
+          case 'satellite':
+            map.addLayer(esriImagery);
+            break;
+          case 'topo':
+            map.addLayer(topoMap);
+            break;
+          case 'street':
+            map.addLayer(streetView);
+            break;
+          default:
+            map.addLayer(osm);
+        }
+      });
+    });
+
+    /* ===============================
+       TAMBAH SKALA PETA
+    ================================ */
+    L.control.scale({
+      imperial: false,
+      metric: true,
+      position: 'bottomleft'
+    }).addTo(map);
+
+    /* Kompas dari file north.jpg: hapus latar mendekati warna sudut menggunakan canvas lalu tampilkan sebagai PNG transparan */
+    (function initNorthCompass(){
+      const imgPath = 'north.jpg';
+
+      const img = new Image();
+      img.src = imgPath;
+
+      img.onload = function(){
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0);
+
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const data = imageData.data;
+
+          // Hitung warna rata-rata dari empat sudut untuk mengenali warna latar
+          function sampleRegion(x, y, w, h) {
+            const sx = Math.max(0, Math.min(canvas.width-1, x));
+            const sy = Math.max(0, Math.min(canvas.height-1, y));
+            let r = 0, g = 0, b = 0, cnt = 0;
+            for (let i = sx; i < Math.min(canvas.width, sx + w); i++) {
+              for (let j = sy; j < Math.min(canvas.height, sy + h); j++) {
+                const idx = (j * canvas.width + i) * 4;
+                r += data[idx]; g += data[idx+1]; b += data[idx+2]; cnt++;
+              }
+            }
+            return cnt ? [r/cnt, g/cnt, b/cnt] : [255,255,255];
+          }
+
+          const sampleSize = Math.max(4, Math.floor(Math.min(canvas.width, canvas.height) * 0.03));
+          const c1 = sampleRegion(0, 0, sampleSize, sampleSize);
+          const c2 = sampleRegion(canvas.width - sampleSize, 0, sampleSize, sampleSize);
+          const c3 = sampleRegion(0, canvas.height - sampleSize, sampleSize, sampleSize);
+          const c4 = sampleRegion(canvas.width - sampleSize, canvas.height - sampleSize, sampleSize, sampleSize);
+
+          const bg = [ (c1[0]+c2[0]+c3[0]+c4[0])/4, (c1[1]+c2[1]+c3[1]+c4[1])/4, (c1[2]+c2[2]+c3[2]+c4[2])/4 ];
+
+          function colorDist(r,g,b){
+            const dr = r - bg[0];
+            const dg = g - bg[1];
+            const db = b - bg[2];
+            return Math.sqrt(dr*dr + dg*dg + db*db);
+          }
+
+          const innerTol = 48; // within this distance => fully transparent
+          const outerTol = 92; // beyond this => fully opaque
+
+          for (let i = 0; i < data.length; i += 4) {
+            const r = data[i], g = data[i+1], b = data[i+2];
+            const d = colorDist(r,g,b);
+            if (d <= innerTol) {
+              data[i+3] = 0;
+            } else if (d < outerTol) {
+              // smooth alpha ramping for softer edges
+              const t = (d - innerTol) / (outerTol - innerTol);
+              data[i+3] = Math.round(255 * t);
+            } // else keep original alpha
+          }
+
+          ctx.putImageData(imageData, 0, 0);
+          const dataURL = canvas.toDataURL('image/png');
+
+          const northEl = document.getElementById('northImg');
+          if (northEl) northEl.src = dataURL;
+        } catch (e) {
+          console.error('Gagal memproses north.jpg:', e);
+          const northEl = document.getElementById('northImg');
+          if (northEl) northEl.src = imgPath; // fallback
+        }
+      };
+
+      img.onerror = function(){
+        console.warn('north.jpg tidak dapat dimuat; menampilkan file asli.');
+        const northEl = document.getElementById('northImg');
+        if (northEl) northEl.src = imgPath;
+      };
+    })();
+
+    /* Help modal toggle logic */
+    (function helpModal(){
+      const helpBtn = document.getElementById('helpToggle');
+      const helpModal = document.getElementById('helpModal');
+      const helpClose = document.getElementById('helpClose');
+      if (!helpBtn || !helpModal) return;
+
+      function openHelp(){
+        helpModal.style.display = 'flex';
+        helpModal.setAttribute('aria-hidden','false');
+      }
+
+      function closeHelp(){
+        helpModal.style.display = 'none';
+        helpModal.setAttribute('aria-hidden','true');
+      }
+
+      helpBtn.addEventListener('click', function(e){ e.stopPropagation(); openHelp(); });
+      if (helpClose) helpClose.addEventListener('click', closeHelp);
+
+      // close when clicking overlay but not the modal content
+      helpModal.addEventListener('click', function(e){ if (e.target === helpModal) closeHelp(); });
+
+      // close on ESC
+      document.addEventListener('keydown', function(e){ if (e.key === 'Escape' || e.key === 'Esc') { closeHelp(); } });
+    })();
+
+    /* ===============================
+       INISIALISASI GEOCODER
+    ================================ */
+    if (L.Control && L.Control.Geocoder) {
+      const geocoder = L.Control.geocoder({
+        collapsed: false,
+        placeholder: 'Cari alamat atau tempat...',
+        defaultMarkGeocode: false
+      }).addTo(map);
+
+      var _lastGeocodeMarker = null;
+      geocoder.on('markgeocode', function(e) {
+        const c = e.geocode.center;
+        map.setView([c.lat, c.lng], 16);
+        // remove previous temporary marker
+        if (_lastGeocodeMarker) {
+          try { map.removeLayer(_lastGeocodeMarker); } catch (err) {}
+          _lastGeocodeMarker = null;
+        }
+        _lastGeocodeMarker = L.marker([c.lat, c.lng]).addTo(map).bindPopup(e.geocode.name || 'Lokasi').openPopup();
+      });
+
+      // remove temp marker when the search input is cleared (user clicks the x)
+      // try to find the input element created by the geocoder control
+      setTimeout(function(){
+        var inputEl = document.querySelector('.leaflet-control-geocoder-form input[type="text"], .leaflet-control-geocoder input[type="text"]');
+        if (!inputEl) {
+          // alternate selector
+          inputEl = document.querySelector('.leaflet-control-geocoder input');
+        }
+        if (inputEl) {
+          inputEl.addEventListener('input', function(){
+            if (!this.value || this.value.trim() === '') {
+              if (_lastGeocodeMarker) {
+                try { map.removeLayer(_lastGeocodeMarker); } catch (e) {}
+                _lastGeocodeMarker = null;
+              }
+            }
+          });
+        }
+      }, 300);
+
+      // Keep compass fixed at bottom-right above the custom attribution
+      function placeCompassUnderSearch() {
+        const compass = document.getElementById('northCompassContainer');
+        if (!compass) return;
+        compass.style.bottom = '90px';
+        compass.style.right = '70px';
+        compass.style.left = 'auto';
+        compass.style.top = 'auto';
+      }
+
+      // Try placing once (short delay to allow the control to render), and again on resize or map move
+      setTimeout(placeCompassUnderSearch, 150);
+      window.addEventListener('resize', placeCompassUnderSearch);
+      map.on && map.on('move resize', placeCompassUnderSearch);
+    }
+
+    /* Sidebar hide/show toggle logic */
+    (function sidebarToggle(){
+      const sidebar = document.querySelector('.sidebar');
+      const toggle = document.getElementById('sidebarToggle');
+      if (!sidebar || !toggle) return;
+
+      function setIcon(collapsed){
+        toggle.innerHTML = collapsed ? '<i class="fas fa-angle-right"></i>' : '<i class="fas fa-angle-left"></i>';
+        if (collapsed) toggle.classList.add('collapsed'); else toggle.classList.remove('collapsed');
+      }
+
+      toggle.addEventListener('click', function(){
+        const isCollapsed = sidebar.classList.toggle('collapsed');
+        setIcon(isCollapsed);
+        // allow CSS transition to finish then invalidate map size
+        setTimeout(function(){ if (window.map && typeof window.map.invalidateSize === 'function') window.map.invalidateSize(); else if (typeof map !== 'undefined') map.invalidateSize(); }, 360);
+      });
+    })();
+
+    /* ===============================
+       EVENT: Rating filter
+    ================================ */
+    (function setupRatingFilter(){
+      const range = document.getElementById('ratingRange');
+      const val = document.getElementById('ratingValue');
+      const applyBtn = document.getElementById('applyRatingBtn');
+      const resetBtn = document.getElementById('resetRatingBtn');
+      if (!range || !val) return;
+
+      range.addEventListener('input', function(){
+        val.textContent = Number(this.value).toFixed(1);
+      });
+
+      applyBtn && applyBtn.addEventListener('click', function(){
+        const min = Number(range.value) || 0;
+        renderSpbuMarkers(min);
+      });
+
+      resetBtn && resetBtn.addEventListener('click', function(){
+        range.value = 0;
+        val.textContent = '0.0';
+        renderSpbuMarkers(0);
+      });
+    })();
+
+    /* ===============================
+       JAGA UKURAN LABEL KECAMATAN SAAT ZOOM
+       - Sesuaikan skala label sehingga tidak terlihat terlalu besar saat zoom out
+    ================================ */
+    (function keepLabelSize(){
+      const BASE_LABEL_ZOOM = 13; // zoom level where label appears at normal size
+
+      function adjustLabelScale(){
+        if (!window.map || !window.map.getZoom) return;
+        const z = map.getZoom();
+        const factor = Math.pow(2, (z - BASE_LABEL_ZOOM));
+        Object.keys(kecamatanLabels || {}).forEach(name => {
+          try {
+            const lbl = kecamatanLabels[name];
+            if (!lbl || !lbl.getElement) return;
+            const el = lbl.getElement();
+            if (!el) return;
+            const inner = el.querySelector('.kecamatan-label');
+            if (!inner) return;
+            inner.style.transform = 'translate(-50%, -50%) scale(' + (factor || 1) + ')';
+            inner.style.transformOrigin = '50% 50%';
+          } catch (e) {}
+        });
+      }
+
+      // adjust on zoom end and initially
+      try {
+        map.on('zoomend', adjustLabelScale);
+        adjustLabelScale();
+      } catch (e) {}
+    })();
+
+  </script>
+</body>
+</html>
