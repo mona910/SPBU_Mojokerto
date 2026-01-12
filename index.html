@@ -1,3 +1,11 @@
+<!--
+Nama        : Syifa Nabila Motumona
+NIM         : 24611064
+Kelas       : B
+Mata Kuliah : Sistem Informasi Geografis
+Judul       : WebGIS SPBU Kabupaten Mojokerto
+-->
+
 <!DOCTYPE html>
 <html lang="id">
 <head>
@@ -938,6 +946,59 @@
       .popup-card {
         width: 280px;
       }
+    }
+
+    /* Additional small-screen adjustments for better mobile UX */
+    @media (max-width: 768px) {
+      .container { height: 100%; }
+      .header { padding: 12px 14px; border-radius: 10px; }
+      .header h1 { font-size: 20px; gap: 8px; }
+      .author { display: none; }
+
+      /* Make the map use remaining viewport space under the header */
+      .map-container { height: calc(100vh - 120px); }
+
+      /* Sidebar becomes an off-canvas overlay on mobile */
+      .sidebar {
+        position: fixed;
+        left: 12px;
+        top: 96px;
+        width: calc(100% - 24px);
+        max-width: 420px;
+        height: calc(100vh - 120px);
+        z-index: 2200;
+        transform: translateX(-120%);
+        transition: transform 320ms ease, box-shadow 320ms ease;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.28);
+        border-radius: 12px;
+        overflow-y: auto;
+      }
+
+      /* When sidebar is not collapsed it should slide in */
+      .sidebar:not(.collapsed) { transform: translateX(0); }
+
+      /* On mobile, ensure collapsed state does not set width:0 (override desktop rule) */
+      .sidebar.collapsed {
+        width: auto !important;
+        padding: 14px !important;
+        margin: initial !important;
+        border-radius: 12px !important;
+        overflow: auto !important;
+        transform: translateX(-120%);
+      }
+
+      /* Make toggle easier to touch */
+      .sidebar-toggle { width:48px; height:48px; top: 100px; left: 10px; }
+
+      /* Make primary action buttons larger for touch */
+      .action-btn, .basemap-btn { min-height:44px; font-size:15px; }
+
+      /* Move Leaflet layer control slightly lower to avoid overlap with search */
+      .leaflet-top .leaflet-control-layers { top: 110px !important; right: 12px !important; }
+
+      /* Ensure compass and custom attribution don't overlap the sidebar toggle */
+      .compass-container { right: 12px; bottom: 84px; }
+
     }
   </style>
 </head>
@@ -1987,10 +2048,15 @@
       const sidebar = document.querySelector('.sidebar');
       const toggle = document.getElementById('sidebarToggle');
       if (!sidebar || !toggle) return;
-
       function setIcon(collapsed){
         toggle.innerHTML = collapsed ? '<i class="fas fa-angle-right"></i>' : '<i class="fas fa-angle-left"></i>';
         if (collapsed) toggle.classList.add('collapsed'); else toggle.classList.remove('collapsed');
+      }
+
+      // On small screens, start collapsed (hidden) so the sidebar acts as an overlay
+      if (window && window.innerWidth && window.innerWidth <= 768) {
+        if (!sidebar.classList.contains('collapsed')) sidebar.classList.add('collapsed');
+        setIcon(true);
       }
 
       toggle.addEventListener('click', function(){
